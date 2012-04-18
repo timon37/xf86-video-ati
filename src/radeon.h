@@ -104,6 +104,12 @@
 #include "simple_list.h"
 #include "atipcirename.h"
 
+
+#ifdef XORG_WAYLAND
+#include <xwayland.h>
+#endif
+
+
 #ifndef MAX
 #define MAX(a,b) ((a)>(b)?(a):(b))
 #endif
@@ -247,7 +253,7 @@ typedef enum {
 
 #define xFixedToFloat(f) (((float) (f)) / 65536)
 
-#define RADEON_LOGLEVEL_DEBUG 4
+#define RADEON_LOGLEVEL_DEBUG 0
 
 /* for Xv, outputs */
 #define MAKE_ATOM(a) MakeAtom(a, sizeof(a) - 1, TRUE)
@@ -1039,6 +1045,9 @@ typedef struct {
 
     /* Perform vsync'ed SwapBuffers? */
     Bool swapBuffersWait;
+
+    struct xwl_screen *xwl_screen;
+
 } RADEONInfoRec, *RADEONInfoPtr;
 
 #define RADEONWaitForFifo(pScrn, entries)				\

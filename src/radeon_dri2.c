@@ -51,6 +51,10 @@
 
 #ifdef RADEON_DRI2
 
+#if 0
+}
+#endif
+
 #include "radeon_bo_gem.h"
 
 #if DRI2INFOREC_VERSION >= 1
@@ -1306,6 +1310,32 @@ blit_fallback:
 #endif /* USE_DRI2_SCHEDULING */
 
 
+#ifdef XORG_WAYLAND
+static int radeon_auth_magic(int fd, uint32_t magic)
+{
+	xf86DrvMsgVerb(0, X_INFO, RADEON_LOGLEVEL_DEBUG, "radeon_auth_magic radeon_auth_magic radeon_auth_magic radeon_auth_magic radeon_auth_magic radeon_auth_magic\n");
+	ScrnInfoPtr scrn;
+	RADEONInfoPtr info;
+//	intel_screen_private *intel;
+	int i;
+
+	/* Not wayland, go stragight to drm */
+//	if (!xorgWayland)
+//		return drmAuthMagic(fd, magic);
+
+	for (i = 0; i < 1; i++) {
+		scrn = xf86Screens[i];
+	//	intel = intel_get_screen_private(scrn);
+		info = RADEONPTR(scrn);
+		if (xwl_screen_get_drm_fd(info->xwl_screen) == fd)
+			break;
+	}
+
+	/* Forward the request to our host */
+	return xwl_drm_authenticate(info->xwl_screen, magic);
+}
+#endif
+
 Bool
 radeon_dri2_screen_init(ScreenPtr pScreen)
 {
@@ -1318,11 +1348,14 @@ radeon_dri2_screen_init(ScreenPtr pScreen)
     Bool scheduling_works = TRUE;
 #endif
 
+    xf86DrvMsgVerb(pScrn->scrnIndex, X_INFO, RADEON_LOGLEVEL_DEBUG, "radeon_dri2_screen_init 0\n");
+    
     if (!info->useEXA) {
         xf86DrvMsg(pScrn->scrnIndex, X_WARNING, "DRI2 requires EXA\n");
         return FALSE;
     }
 
+    xf86DrvMsgVerb(pScrn->scrnIndex, X_INFO, RADEON_LOGLEVEL_DEBUG, "radeon_dri2_screen_init 10\n");
     info->dri2.device_name = drmGetDeviceNameFromFd(info->dri2.drm_fd);
 
     if ( (info->ChipFamily >= CHIP_FAMILY_R600) ) {
@@ -1347,14 +1380,18 @@ radeon_dri2_screen_init(ScreenPtr pScreen)
 #endif
     dri2_info.CopyRegion = radeon_dri2_copy_region;
 
+    xf86DrvMsgVerb(pScrn->scrnIndex, X_INFO, RADEON_LOGLEVEL_DEBUG, "radeon_dri2_screen_init 20\n");
 #ifdef USE_DRI2_SCHEDULING
     if (info->dri->pKernelDRMVersion->version_minor < 4) {
 	xf86DrvMsg(pScrn->scrnIndex, X_WARNING, "You need a newer kernel for "
 		   "sync extension\n");
 	scheduling_works = FALSE;
     }
-
-    if (scheduling_works && info->drmmode.mode_res->count_crtcs > 2) {
+    xf86DrvMsgVerb(pScrn->scrnIndex, X_INFO, RADEON_LOGLEVEL_DEBUG, "radeon_dri2_screen_init 30\n");
+/*	if (!info->drmmode.mode_res)
+		xf86DrvMsgVerb(pScrn->scrnIndex, X_INFO, RADEON_LOGLEVEL_DEBUG, "radeon_dri2_screen_init !info->drmmode.mode_res\n");
+	
+    if (scheduling_works && info->drmmode.mode_res->count_crtcs > 2) {/*
 #ifdef DRM_CAP_VBLANK_HIGH_CRTC
 	uint64_t cap_value;
 
@@ -1367,12 +1404,13 @@ radeon_dri2_screen_init(ScreenPtr pScreen)
 		       "handle VBLANKs on CRTC > 1\n");
 	    scheduling_works = FALSE;
 	}
-#else
+#else/**/
 	xf86DrvMsg(pScrn->scrnIndex, X_WARNING, "You need to rebuild against a "
 		   "newer libdrm to handle VBLANKs on CRTC > 1\n");
 	scheduling_works = FALSE;
-#endif
-    }
+//#endif
+//    }
+    xf86DrvMsgVerb(pScrn->scrnIndex, X_INFO, RADEON_LOGLEVEL_DEBUG, "radeon_dri2_screen_init 40\n");
 
     if (scheduling_works) {
         dri2_info.version = 4;
@@ -1406,7 +1444,13 @@ radeon_dri2_screen_init(ScreenPtr pScreen)
 	pRADEONEnt->dri2_info_cnt++;
     }
 #endif
+    xf86DrvMsgVerb(pScrn->scrnIndex, X_INFO, RADEON_LOGLEVEL_DEBUG, "radeon_dri2_screen_init end\n");
 
+#if DRI2INFOREC_VERSION >= 5 && defined(XORG_WAYLAND)
+	dri2_info.version = 5;
+	dri2_info.AuthMagic = radeon_auth_magic;
+#endif
+	
     info->dri2.enabled = DRI2ScreenInit(pScreen, &dri2_info);
     return info->dri2.enabled;
 }

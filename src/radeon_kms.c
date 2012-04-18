@@ -43,6 +43,10 @@
 
 #ifdef XF86DRM_MODE
 
+#if 0
+}
+#endif
+
 #include "radeon_chipset_gen.h"
 #include "radeon_chipinfo_gen.h"
 
@@ -52,6 +56,107 @@
 #include "radeon_bo_gem.h"
 #include "radeon_cs_gem.h"
 #include "radeon_vbo.h"
+
+
+#define dHack(fmt)	\
+	do {	\
+		xf86DrvMsgVerb(pScrn->scrnIndex, X_INFO, RADEON_LOGLEVEL_DEBUG, fmt);	\
+	}while(0)
+/*
+		xf86DrvMsg (pScrn->scrnIndex, X_ERROR, fmt);	\
+*/
+
+#define dHackP(fmt,...)	\
+	do {	\
+		char buf[256];	\
+		sprintf (buf, fmt,##__VA_ARGS__);	\
+		xf86DrvMsgVerb(0, X_INFO, RADEON_LOGLEVEL_DEBUG, buf);	\
+	}while(0)
+/*
+static int
+drm_intel_gem_bo_flink(drm_intel_bo *bo, uint32_t * name)
+{
+	drm_intel_bufmgr_gem *bufmgr_gem = (drm_intel_bufmgr_gem *) bo->bufmgr;
+	drm_intel_bo_gem *bo_gem = (drm_intel_bo_gem *) bo;
+	int ret;
+
+	if (!bo_gem->global_name) {
+		struct drm_gem_flink flink;
+
+		VG_CLEAR(flink);
+		flink.handle = bo_gem->gem_handle;
+
+		ret = drmIoctl(bufmgr_gem->fd, DRM_IOCTL_GEM_FLINK, &flink);
+		if (ret != 0)
+			return -errno;
+
+		bo_gem->global_name = flink.name;
+		bo_gem->reusable = false;
+
+		DRMLISTADDTAIL(&bo_gem->name_list, &bufmgr_gem->named);
+	}
+
+	*name = bo_gem->global_name;
+	return 0;
+}
+/*
+int drm_intel_bo_flink(drm_intel_bo *bo, uint32_t * name)
+{
+	if (bo->bufmgr->bo_flink)
+		return bo->bufmgr->bo_flink(bo, name);
+
+	return -ENODEV;
+}/**/
+
+#define xf86DrvMsgVerb(...)	do{}while(0);
+
+
+#ifdef XORG_WAYLAND
+int radeon_create_window_buffer(struct xwl_window *xwl_window, PixmapPtr pixmap)
+{
+	xf86DrvMsgVerb(0, X_INFO, RADEON_LOGLEVEL_DEBUG, "radeon_create_window_buffer\n");
+//	dHack ("radeon_create_window_buffer\n");
+	uint32_t name;
+	struct radeon_bo *bo;
+
+	xf86DrvMsgVerb(0, X_INFO, RADEON_LOGLEVEL_DEBUG, "radeon_create_window_buffer radeon_get_pixmap_bo(0x%lx)\n", pixmap);
+	
+//	struct radeon_bo *radeon_get_pixmap_bo(PixmapPtr pPix)
+	{
+		struct radeon_exa_pixmap_priv *driver_priv;
+		driver_priv = exaGetPixmapDriverPrivate(pixmap);
+		xf86DrvMsgVerb(0, X_INFO, RADEON_LOGLEVEL_DEBUG, "radeon_create_window_buffer driver_priv 0x%lx\n", driver_priv);
+	//	if (!driver_priv)
+	//		return BadDrawable;
+		bo = driver_priv->bo;
+	}
+
+	bo = radeon_get_pixmap_bo(pixmap);
+	xf86DrvMsgVerb(0, X_INFO, RADEON_LOGLEVEL_DEBUG, "radeon_create_window_buffer radeon_get_pixmap_bo %lx\n", bo);
+	if (bo == NULL || radeon_gem_get_kernel_name(bo, &name) != 0) {
+		xf86DrvMsgVerb(0, X_INFO, RADEON_LOGLEVEL_DEBUG, "radeon_create_window_buffer BadDrawable\n");
+	//	dHack ("radeon_create_window_buffer return BadDrawable\n");
+		return BadDrawable;
+	}
+//	xf86DrvMsgVerb(0, X_INFO, RADEON_LOGLEVEL_DEBUG, "radeon_create_window_buffer good\n");
+	
+//	dHackP ("radeon_create_window_buffer good name %d\n", radeon_gem_name_bo(bo));
+//	dHackP ("radeon_create_window_buffer good kernel name %d\n", name);
+	
+	int ret = xwl_create_window_buffer_drm(xwl_window, pixmap, name);
+	
+//	dHackP ("radeon_create_window_buffer good ret %d\n", ret);
+	return ret;
+}
+
+static struct xwl_driver xwl_driver = {
+	.version = 1,
+	.use_drm = 1,
+	.create_window_buffer = radeon_create_window_buffer
+};
+#endif
+
+
 
 static Bool radeon_setup_kernel_mem(ScreenPtr pScreen);
 
@@ -145,6 +250,7 @@ radeonShadowWindow(ScreenPtr screen, CARD32 row, CARD32 offset, int mode,
 		   CARD32 *size, void *closure)
 {
     ScrnInfoPtr pScrn = xf86Screens[screen->myNum];
+	dHack ("RADEONCreateScreenResources_KMS\n");
     RADEONInfoPtr  info   = RADEONPTR(pScrn);
     int stride;
 
@@ -164,8 +270,14 @@ static Bool RADEONCreateScreenResources_KMS(ScreenPtr pScreen)
     pScreen->CreateScreenResources = info->CreateScreenResources;
     if (!(*pScreen->CreateScreenResources)(pScreen))
 	return FALSE;
+	
+	
     pScreen->CreateScreenResources = RADEONCreateScreenResources_KMS;
 
+#ifdef XORG_WAYLAND
+	if (info->xwl_screen)
+		xwl_screen_init(info->xwl_screen, pScreen);
+#endif
     if (!drmmode_set_desired_modes(pScrn, &info->drmmode))
 	return FALSE;
 
@@ -213,9 +325,19 @@ radeon_flush_callback(CallbackListPtr *list,
 		      pointer user_data, pointer call_data)
 {
     ScrnInfoPtr pScrn = user_data;
+//	dHack ("radeon_flush_callback\n");
+    RADEONInfoPtr  info    = RADEONPTR(pScrn);
 
     if (pScrn->vtSema) {
         radeon_cs_flush_indirect(pScrn);
+        
+//	radeon_vbo_flush_bos(pScrn);
+#ifdef XORG_WAYLAND
+		if (info->xwl_screen) {
+		//	dHack ("xwl_screen_post_damage\n");
+			xwl_screen_post_damage(info->xwl_screen);
+		}
+#endif
     }
 }
 
@@ -314,6 +436,7 @@ static Bool RADEONPreInitAccel_KMS(ScrnInfoPtr pScrn)
     }
 
     info->useEXA = TRUE;
+//    info->useEXA = FALSE;
 
     if (info->useEXA) {
 	int errmaj = 0, errmin = 0;
@@ -427,6 +550,7 @@ static Bool radeon_alloc_dri(ScrnInfoPtr pScrn)
 
 static Bool radeon_open_drm_master(ScrnInfoPtr pScrn)
 {
+	dHack ("radeon_open_drm_master\n");
     RADEONInfoPtr  info   = RADEONPTR(pScrn);
     RADEONEntPtr pRADEONEnt = RADEONEntPriv(pScrn);
     struct pci_device *dev = info->PciInfo;
@@ -612,6 +736,12 @@ Bool RADEONPreInit_KMS(ScrnInfoPtr pScrn, int flags)
 
     xf86DrvMsgVerb(pScrn->scrnIndex, X_INFO, RADEON_LOGLEVEL_DEBUG,
 		   "RADEONPreInit_KMS\n");
+	
+	{char buf[64];
+	sprintf (buf, "RADEONPreInit_KMS scrnIndex %d\n", pScrn->scrnIndex);
+	xf86DrvMsgVerb(pScrn->scrnIndex, X_INFO, RADEON_LOGLEVEL_DEBUG, buf);
+	}
+	
     if (pScrn->numEntities != 1) return FALSE;
     if (!RADEONGetRec(pScrn)) return FALSE;
 
@@ -665,7 +795,24 @@ Bool RADEONPreInit_KMS(ScrnInfoPtr pScrn, int flags)
     if (!radeon_alloc_dri(pScrn))
 	return FALSE;
 
-    if (radeon_open_drm_master(pScrn) == FALSE) {
+#ifdef XORG_WAYLAND
+	{
+		xf86LoadSubModule(pScrn, "xwayland");
+		info->xwl_screen = xwl_screen_pre_init(pScrn, 0, &xwl_driver);
+		if (!info->xwl_screen) {
+			xf86DrvMsg(pScrn->scrnIndex, X_ERROR, "Failed to initialize xwayland.\n");
+			return FALSE;
+		}
+
+		info->dri2.drm_fd = xwl_screen_get_drm_fd(info->xwl_screen);
+		info->drmmode.fd = info->dri2.drm_fd;
+		info->dri->drmFD = info->dri2.drm_fd;
+		RADEONEntPtr pRADEONEnt = RADEONEntPriv(pScrn);
+		pRADEONEnt->fd = info->dri2.drm_fd;
+	}
+#endif
+
+    if (!info->xwl_screen && radeon_open_drm_master(pScrn) == FALSE) {
 	xf86DrvMsg(pScrn->scrnIndex, X_ERROR, "Kernel modesetting setup failed\n");
 	goto fail;
     }
@@ -721,30 +868,47 @@ Bool RADEONPreInit_KMS(ScrnInfoPtr pScrn, int flags)
 	       "KMS Color Tiling requires xserver which supports EXA_MIXED_PIXMAPS\n");
 #endif
 	info->allowColorTiling = FALSE;
+	
+	info->allowColorTiling = FALSE;
+	info->allowColorTiling2D = FALSE;
+	info->allowColorTiling = FALSE;
 
-    xf86DrvMsg(pScrn->scrnIndex, X_INFO,
-	 "KMS Color Tiling: %sabled\n", info->allowColorTiling ? "en" : "dis");
+    xf86DrvMsg(pScrn->scrnIndex, X_INFO, "KMS Color Tiling: %sabled\n", info->allowColorTiling ? "en" : "dis");
 
     if (info->dri->pKernelDRMVersion->version_minor >= 8) {
 	info->allowPageFlip = xf86ReturnOptValBool(info->Options,
 						   OPTION_PAGE_FLIP, TRUE);
+//	info->allowPageFlip = FALSE;
 	xf86DrvMsg(pScrn->scrnIndex, X_INFO,
 		   "KMS Pageflipping: %sabled\n", info->allowPageFlip ? "en" : "dis");
     }
 
     info->swapBuffersWait = xf86ReturnOptValBool(info->Options,
 						 OPTION_SWAPBUFFERS_WAIT, TRUE);
+	info->swapBuffersWait = FALSE;
+	
     xf86DrvMsg(pScrn->scrnIndex, X_INFO,
 	       "SwapBuffers wait for vsync: %sabled\n", info->swapBuffersWait ? "en" : "dis");
 
-    if (drmmode_pre_init(pScrn, &info->drmmode, pScrn->bitsPerPixel / 8) == FALSE) {
+	if (!info->xwl_screen)
+		info->swapBuffersWait = TRUE;
+	info->swapBuffersWait = FALSE;
+
+    xf86DrvMsgVerb(pScrn->scrnIndex, X_INFO, RADEON_LOGLEVEL_DEBUG, "RADEONPreInit_KMS 10\n");
+    
+    if (info->xwl_screen) {
+		info->drmmode.mode_res = drmModeGetResources(info->drmmode.fd);
+	    
+    }else if (/*!info->xwl_screen &&*/ drmmode_pre_init(pScrn, &info->drmmode, pScrn->bitsPerPixel / 8) == FALSE) {
+    xf86DrvMsgVerb(pScrn->scrnIndex, X_INFO, RADEON_LOGLEVEL_DEBUG, "RADEONPreInit_KMS 11\n");
 	xf86DrvMsg(pScrn->scrnIndex, X_ERROR, "Kernel modesetting setup failed\n");
 	goto fail;
     }
+    xf86DrvMsgVerb(pScrn->scrnIndex, X_INFO, RADEON_LOGLEVEL_DEBUG, "RADEONPreInit_KMS 12\n");
 
-    if (info->drmmode.mode_res->count_crtcs == 1)
-        pRADEONEnt->HasCRTC2 = FALSE;
-    else
+//    if (info->drmmode.mode_res->count_crtcs == 1)
+//        pRADEONEnt->HasCRTC2 = FALSE;
+//    else
         pRADEONEnt->HasCRTC2 = TRUE;
 
 
@@ -754,6 +918,7 @@ Bool RADEONPreInit_KMS(ScrnInfoPtr pScrn, int flags)
      * which results in only one monitor being enabled.  Assign a crtc here so
      * that both outputs light up.
      */
+    xf86DrvMsgVerb(pScrn->scrnIndex, X_INFO, RADEON_LOGLEVEL_DEBUG, "RADEONPreInit_KMS 20\n");
     if (info->ChipFamily == CHIP_FAMILY_RV100 && !pRADEONEnt->HasCRTC2) {
 	xf86CrtcConfigPtr xf86_config = XF86_CRTC_CONFIG_PTR(pScrn);
 	int i;
@@ -767,6 +932,7 @@ Bool RADEONPreInit_KMS(ScrnInfoPtr pScrn, int flags)
 	}
     }
 
+    xf86DrvMsgVerb(pScrn->scrnIndex, X_INFO, RADEON_LOGLEVEL_DEBUG, "RADEONPreInit_KMS 30\n");
     {
 	struct drm_radeon_gem_info mminfo;
 
@@ -782,10 +948,14 @@ Bool RADEONPreInit_KMS(ScrnInfoPtr pScrn, int flags)
 	}
     }
 
+    xf86DrvMsgVerb(pScrn->scrnIndex, X_INFO, RADEON_LOGLEVEL_DEBUG, "RADEONPreInit_KMS 40\n");
     info->exa_pixmaps = xf86ReturnOptValBool(info->Options,
                                              OPTION_EXA_PIXMAPS, 
 					     ((info->vram_size > (32 * 1024 * 1024) &&
 					      info->RenderAccel)));
+	
+	
+//	info->exa_pixmaps = FALSE;
     if (info->exa_pixmaps)
     	xf86DrvMsg(pScrn->scrnIndex, X_INFO,
 		"EXA: Driver will allow EXA pixmaps in VRAM\n");
@@ -805,6 +975,7 @@ Bool RADEONPreInit_KMS(ScrnInfoPtr pScrn, int flags)
 	RADEON_ALIGN(pScrn->virtualX, drmmode_get_pitch_align(pScrn, cpp, tiling));
     info->CurrentLayout.displayWidth = pScrn->displayWidth;
 
+    xf86DrvMsgVerb(pScrn->scrnIndex, X_INFO, RADEON_LOGLEVEL_DEBUG, "RADEONPreInit_KMS 50\n");
     /* Set display resolution */
     xf86SetDpi(pScrn, 0, 0);
 
@@ -822,8 +993,11 @@ Bool RADEONPreInit_KMS(ScrnInfoPtr pScrn, int flags)
       goto fail;
    }
 
+    xf86DrvMsgVerb(pScrn->scrnIndex, X_INFO, RADEON_LOGLEVEL_DEBUG, "RADEONPreInit_KMS finish\n");
+	dHack ("RADEONPreInit_KMS return true\n");
     return TRUE;
  fail:
+    xf86DrvMsgVerb(pScrn->scrnIndex, X_INFO, RADEON_LOGLEVEL_DEBUG, "RADEONPreInit_KMS fail\n");
     RADEONFreeRec(pScrn);
     return FALSE;
 
@@ -926,6 +1100,9 @@ Bool RADEONScreenInit_KMS(int scrnIndex, ScreenPtr pScreen,
     void *front_ptr;
     int ret;
 
+    xf86DrvMsgVerb(pScrn->scrnIndex, X_INFO, RADEON_LOGLEVEL_DEBUG,
+		   "RADEONScreenInit_KMS\n");
+		   
     pScrn->fbOffset = 0;
 
     miClearVisualTypes();
@@ -935,18 +1112,28 @@ Bool RADEONScreenInit_KMS(int scrnIndex, ScreenPtr pScreen,
 			  pScrn->defaultVisual)) return FALSE;
     miSetPixmapDepths ();
 
+    xf86DrvMsgVerb(pScrn->scrnIndex, X_INFO, RADEON_LOGLEVEL_DEBUG,
+		   "RADEONScreenInit_KMS 10\n");
+		   
     ret = drmSetMaster(info->dri->drmFD);
     if (ret) {
         ErrorF("Unable to retrieve master\n");
         return FALSE;
     }
+    xf86DrvMsgVerb(pScrn->scrnIndex, X_INFO, RADEON_LOGLEVEL_DEBUG,
+		   "RADEONScreenInit_KMS 11\n");
     info->directRenderingEnabled = FALSE;
+    
     if (info->r600_shadow_fb == FALSE)
         info->directRenderingEnabled = radeon_dri2_screen_init(pScreen);
 
+    xf86DrvMsgVerb(pScrn->scrnIndex, X_INFO, RADEON_LOGLEVEL_DEBUG,
+		   "RADEONScreenInit_KMS 12\n");
     front_ptr = info->FB;
 
     info->surf_man = radeon_surface_manager_new(info->dri->drmFD);
+    xf86DrvMsgVerb(pScrn->scrnIndex, X_INFO, RADEON_LOGLEVEL_DEBUG,
+		   "RADEONScreenInit_KMS 13\n");
     if (!info->bufmgr)
         info->bufmgr = radeon_bo_manager_gem_ctor(info->dri->drmFD);
     if (!info->bufmgr) {
@@ -954,8 +1141,12 @@ Bool RADEONScreenInit_KMS(int scrnIndex, ScreenPtr pScreen,
 		   "failed to initialise GEM buffer manager");
 	return FALSE;
     }
+    xf86DrvMsgVerb(pScrn->scrnIndex, X_INFO, RADEON_LOGLEVEL_DEBUG,
+		   "RADEONScreenInit_KMS 14\n");
     drmmode_set_bufmgr(pScrn, &info->drmmode, info->bufmgr);
 
+    xf86DrvMsgVerb(pScrn->scrnIndex, X_INFO, RADEON_LOGLEVEL_DEBUG,
+		   "RADEONScreenInit_KMS 15\n");
     if (!info->csm)
         info->csm = radeon_cs_manager_gem_ctor(info->dri->drmFD);
     if (!info->csm) {
@@ -964,6 +1155,8 @@ Bool RADEONScreenInit_KMS(int scrnIndex, ScreenPtr pScreen,
 	return FALSE;
     }
 
+    xf86DrvMsgVerb(pScrn->scrnIndex, X_INFO, RADEON_LOGLEVEL_DEBUG,
+		   "RADEONScreenInit_KMS 16\n");
     if (!info->cs)
         info->cs = radeon_cs_create(info->csm, RADEON_BUFFER_SIZE/4);
     if (!info->cs) {
@@ -971,7 +1164,11 @@ Bool RADEONScreenInit_KMS(int scrnIndex, ScreenPtr pScreen,
 		   "failed to initialise command submission buffer");
 	return FALSE;
     }
+    xf86DrvMsgVerb(pScrn->scrnIndex, X_INFO, RADEON_LOGLEVEL_DEBUG,
+		   "RADEONScreenInit_KMS 17\n");
 
+    xf86DrvMsgVerb(pScrn->scrnIndex, X_INFO, RADEON_LOGLEVEL_DEBUG,
+		   "RADEONScreenInit_KMS 20\n");
     radeon_cs_set_limit(info->cs, RADEON_GEM_DOMAIN_GTT, info->gart_size);
     radeon_cs_space_set_flush(info->cs, (void(*)(void *))radeon_cs_flush_indirect, pScrn); 
 
@@ -1022,6 +1219,8 @@ Bool RADEONScreenInit_KMS(int scrnIndex, ScreenPtr pScreen,
 	}
     }
 
+    xf86DrvMsgVerb(pScrn->scrnIndex, X_INFO, RADEON_LOGLEVEL_DEBUG,
+		   "RADEONScreenInit_KMS 50\n");
     /* Must be after RGB order fixed */
     fbPictureInit (pScreen, 0, 0);
 
@@ -1085,6 +1284,8 @@ Bool RADEONScreenInit_KMS(int scrnIndex, ScreenPtr pScreen,
 	}
     }
 
+    xf86DrvMsgVerb(pScrn->scrnIndex, X_INFO, RADEON_LOGLEVEL_DEBUG,
+		   "RADEONScreenInit_KMS 60\n");
     /* DGA setup */
 #ifdef XFreeXDGA
     /* DGA is dangerous on kms as the base and framebuffer location may change:
@@ -1122,6 +1323,8 @@ Bool RADEONScreenInit_KMS(int scrnIndex, ScreenPtr pScreen,
     info->CreateScreenResources = pScreen->CreateScreenResources;
     pScreen->CreateScreenResources = RADEONCreateScreenResources_KMS;
 
+    xf86DrvMsgVerb(pScrn->scrnIndex, X_INFO, RADEON_LOGLEVEL_DEBUG,
+		   "RADEONScreenInit_KMS 80\n");
    if (!xf86CrtcScreenInit (pScreen))
        return FALSE;
 
@@ -1129,6 +1332,8 @@ Bool RADEONScreenInit_KMS(int scrnIndex, ScreenPtr pScreen,
 //    info->PointerMoved = pScrn->PointerMoved;
 //    pScrn->PointerMoved = RADEONPointerMoved;
 
+    xf86DrvMsgVerb(pScrn->scrnIndex, X_INFO, RADEON_LOGLEVEL_DEBUG,
+		   "RADEONScreenInit_KMS 90\n");
     if (!drmmode_setup_colormap(pScreen, pScrn))
 	return FALSE;
 
@@ -1144,6 +1349,8 @@ Bool RADEONScreenInit_KMS(int scrnIndex, ScreenPtr pScreen,
     info->accel_state->XInited3D = FALSE;
     info->accel_state->engineMode = EXA_ENGINEMODE_UNKNOWN;
 
+    xf86DrvMsgVerb(pScrn->scrnIndex, X_INFO, RADEON_LOGLEVEL_DEBUG,
+		   "RADEONScreenInit_KMS finish\n");
     return TRUE;
 }
 

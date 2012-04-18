@@ -384,6 +384,7 @@ void RADEONFinishAccess_CS(PixmapPtr pPix, int index)
 
 void *RADEONEXACreatePixmap(ScreenPtr pScreen, int size, int align)
 {
+	xf86DrvMsgVerb(0, X_INFO, 0, "AEUEUEOUUEAEUEUEOUUEAEUEUEOUUE  RADEONEXACreatePixmap 0\n");
     ScrnInfoPtr pScrn = xf86Screens[pScreen->myNum];
     RADEONInfoPtr info = RADEONPTR(pScrn);
     struct radeon_exa_pixmap_priv *new_priv;
@@ -450,6 +451,9 @@ void *RADEONEXACreatePixmap2(ScreenPtr pScreen, int width, int height,
 			     int depth, int usage_hint, int bitsPerPixel,
 			     int *new_pitch)
 {
+//	xf86DrvMsgVerb(0, X_INFO, 0, "AEUEUEOUUEAEUEUEOUUEAEUEUEOUUE  RADEONEXACreatePixmap2 0\n");
+//	xf86DrvMsgVerb(0, X_INFO, 0, "RADEONEXACreatePixmap2 wh %d %d\n", width, height);
+//	xf86DrvMsgVerb(0, X_INFO, 0, "RADEONEXACreatePixmap2 depth %d %d\n", depth, bitsPerPixel);
     ScrnInfoPtr pScrn = xf86Screens[pScreen->myNum];
     RADEONInfoPtr info = RADEONPTR(pScrn);
     struct radeon_exa_pixmap_priv *new_priv;
@@ -464,8 +468,10 @@ void *RADEONEXACreatePixmap2(ScreenPtr pScreen, int width, int height,
 #ifdef EXA_MIXED_PIXMAPS
     if (info->accel_state->exa->flags & EXA_MIXED_PIXMAPS) {
 	if (width != 0 && height != 0 && !info->exa_force_create &&
-	    info->exa_pixmaps == FALSE)
+	    info->exa_pixmaps == FALSE) {
+		xf86DrvMsgVerb(0, X_INFO, 0, "AEUEUEOUUEAEUEUEOUUEAEUEUEOUUE  RADEONEXACreatePixmap2 ret NULL\n");
             return NULL;
+	    }
     }
 #endif
 
@@ -527,9 +533,11 @@ void *RADEONEXACreatePixmap2(ScreenPtr pScreen, int width, int height,
 				surface.flags |= RADEON_SURF_SBUFFER;
 			}
 			if (radeon_surface_best(info->surf_man, &surface)) {
+				xf86DrvMsgVerb(0, X_INFO, 0, "AEUEUEOUUEAEUEUEOUUEAEUEUEOUUE  RADEONEXACreatePixmap2 ret NULL 1\n");
 				return NULL;
 			}
 			if (radeon_surface_init(info->surf_man, &surface)) {
+				xf86DrvMsgVerb(0, X_INFO, 0, "AEUEUEOUUEAEUEUEOUUEAEUEUEOUUE  RADEONEXACreatePixmap2 ret NULL 2\n");
 				return NULL;
 			}
 			size = surface.bo_size;
@@ -557,10 +565,12 @@ void *RADEONEXACreatePixmap2(ScreenPtr pScreen, int width, int height,
 
     new_priv = calloc(1, sizeof(struct radeon_exa_pixmap_priv));
     if (!new_priv) {
+	xf86DrvMsgVerb(0, X_INFO, 0, "AEUEUEOUUEAEUEUEOUUEAEUEUEOUUE  RADEONEXACreatePixmap2 ret NULL 3\n");
 	return NULL;
     }
 
     if (size == 0) {
+	xf86DrvMsgVerb(0, X_INFO, 0, "AEUEUEOUUEAEUEUEOUUEAEUEUEOUUE  RADEONEXACreatePixmap2 ret NULL 4\n");
 	return new_priv;
     }
 
@@ -571,6 +581,7 @@ void *RADEONEXACreatePixmap2(ScreenPtr pScreen, int width, int height,
     if (!new_priv->bo) {
 	free(new_priv);
 	ErrorF("Failed to alloc memory\n");
+	xf86DrvMsgVerb(0, X_INFO, 0, "AEUEUEOUUEAEUEUEOUUEAEUEUEOUUE  RADEONEXACreatePixmap2 ret NULL 4\n");
 	return NULL;
     }
 

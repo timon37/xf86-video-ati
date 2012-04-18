@@ -209,6 +209,9 @@ static const OptionInfoRec RADEONOptions[] = {
     { -1,                    NULL,               OPTV_NONE,    {0}, FALSE }
 };
 
+
+
+
 const OptionInfoRec *RADEONOptionsWeak(void) { return RADEONOptions; }
 
 extern _X_EXPORT int gRADEONEntityIndex;
@@ -250,6 +253,12 @@ RADEONCreateScreenResources (ScreenPtr pScreen)
    pScreen->CreateScreenResources = info->CreateScreenResources;
    if (!(*pScreen->CreateScreenResources)(pScreen))
       return FALSE;
+
+   #ifdef XORG_WAYLAND
+   if (info->xwl_screen)
+      xwl_screen_init(info->xwl_screen, pScreen);
+   #endif
+
    pScreen->CreateScreenResources = RADEONCreateScreenResources;
 
    if (info->r600_shadow_fb) {
@@ -2981,6 +2990,8 @@ Bool RADEONPreInit(ScrnInfoPtr pScrn, int flags)
 
     xf86DrvMsgVerb(pScrn->scrnIndex, X_INFO, RADEON_LOGLEVEL_DEBUG,
 		   "RADEONPreInit\n");
+		   
+	exit (1);
     if (pScrn->numEntities != 1) return FALSE;
 
     if (!RADEONGetRec(pScrn)) return FALSE;
@@ -3184,6 +3195,7 @@ Bool RADEONPreInit(ScrnInfoPtr pScrn, int flags)
 		info->r600_shadow_fb = FALSE;
 	}
     }
+
 
     if (!RADEONPreInitVRAM(pScrn))
 	goto fail;
